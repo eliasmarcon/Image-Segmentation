@@ -1,6 +1,7 @@
 import torch
 import logging
 import time
+import collections
 
 from typing import Tuple
 
@@ -13,9 +14,9 @@ class Trainer:
                  loss_fn,
                  lr_scheduler,
                  train_loader,
-                 train_metric,
+                 train_metric_tracker,
                  val_loader,
-                 val_metric,
+                 val_metric_tracker,
                  device,
                  wandb_logger,
                  save_dir,
@@ -28,9 +29,9 @@ class Trainer:
         self.loss_fn = loss_fn
         self.lr_scheduler = lr_scheduler
         self.train_loader = train_loader
-        self.train_metric = train_metric
+        self.train_metric_tracker = train_metric_tracker
         self.val_loader = val_loader
-        self.val_metric = val_metric
+        self.val_metric_tracker = val_metric_tracker
         self.device = device
         self.wandb_logger = wandb_logger
         self.save_dir = save_dir
@@ -43,8 +44,7 @@ class Trainer:
         self.num_train_data = len(train_loader.dataset)
         self.num_val_data = len(val_loader.dataset)
         self.best_val_loss = float('inf')
-        self.best_acc = 0.0     
-        self.best_pcacc = 0.0
+        self.best_mIoU = 0.0     
             
 
     def train(self, epochs) -> None:
@@ -66,20 +66,20 @@ class Trainer:
             starting_time = time.time()
 
             # Train for one epoch
-            train_loss, train_acc, train_pcacc = self._train_epoch()
+            train_loss, train_dice_score, train_mIoU = self._train_epoch()
 
             # check if validation should be performed
             if epoch_idx % self.val_freq == 0:
 
                 # validate
-                val_loss, val_acc, val_pcacc = self._val_epoch()
+                val_loss, val_dice_score, val_mIoU = self._val_epoch()
 
                 # Check if the current per class accuracy and validation loss is better than the best
-                if val_acc > self.best_acc:
-                    self.best_acc = val_acc
+                if val_mIoU > self.best_mIoU:
+                    self.best_mIoU = val_mIoU
 
                     # Save the model as the best per class accuracy model
-                    self.model.save(self.save_dir, f"best_val_acc")
+                    self.model.save(self.save_dir, f"best_val_mIoU")
                                 
                 # Check if the current validation loss is better than the best
                 if val_loss < self.best_val_loss:
@@ -103,31 +103,20 @@ class Trainer:
             # Log the current metrics
             logging.info(
                 f"Epoch {epoch_idx:2}/{epochs} completed in {(time.time() - starting_time):4.2f} seconds | "
-                f"Train Loss: {train_loss:6.4f} | Train Accuracy: {train_acc:6.4f} | Train per Class Accuracy: {train_pcacc:6.4f} | "
-                f"Val Loss: {val_loss:6.4f} | Val Accuracy: {val_acc:6.4f} | Val per Class Accuracy: {val_pcacc:6.4f}"
+                f"Train Loss: {train_loss:6.4f} | Train Dice Score: {train_dice_score:6.4f} | Train mIoU: {train_mIoU:6.4f} | "
+                f"Val Loss: {val_loss:6.4f} | Val Dice Score: {val_dice_score:6.4f} | Val mIoU: {val_mIoU:6.4f}"
             )
                
             if self.wandb_logger:
                 
                 self.wandb_logger.log({
                     f"train_loss": train_loss,
-                    f"train_accuracy": train_acc,
-                    f"train_per_class_accuracy": train_pcacc,
+                    f"train_dice_score": train_dice_score,
+                    f"train_mIoU": train_mIoU,
                     f"val_loss": val_loss if (epoch_idx + 1) % self.val_freq == 0 else None,
-                    f"val_accuracy": val_acc if (epoch_idx + 1) % self.val_freq == 0 else None,
-                    f"val_per_class_accuracy": val_pcacc if (epoch_idx + 1) % self.val_freq == 0 else None,
+                    f"val_dice_score": val_dice_score if (epoch_idx + 1) % self.val_freq == 0 else None,
+                    f"val_mIoU": val_mIoU if (epoch_idx + 1) % self.val_freq == 0 else None,
                 })
-                
-                # Log the per class accuracy
-                per_class_accs_train = self.train_metric.get_per_class_accuracy()
-                per_class_accs_val = self.val_metric.get_per_class_accuracy()
-                class_names_val = self.val_metric.classes
-                
-                for per_class_acc_train, per_class_acc_val, class_name in zip(per_class_accs_train, per_class_accs_val, class_names_val):
-                    self.wandb_logger.log({
-                        f"train_per_class_accuracy_{class_name.lower()}": per_class_acc_train,
-                        f"val_per_class_accuracy_{class_name.lower()}": per_class_acc_val
-                    })
                             
         # save the final model
         self.model.save(self.save_dir, f"terminal")
@@ -141,7 +130,7 @@ class Trainer:
         """
         
         # Reset the training metric
-        self.train_metric.reset()
+        self.train_metric_tracker.reset()
         
         # Initialize the epoch loss
         epoch_loss = 0.0
@@ -150,9 +139,16 @@ class Trainer:
         self.model.train()
         
         # Loop over the training data set
-        for inputs, targets in self.train_loader:
+        for _, (inputs, targets) in enumerate(self.train_loader):
+            
             # Move inputs and targets to the specified device
             inputs, targets = inputs.to(self.device), targets.to(self.device).long()
+            # Squueze the target tensor if it has a channel dimension [BatchSize, 1, H, W] -> [BatchSize, H, W]
+            targets = targets.squeeze(1)
+            
+            # print("Input shape: ", inputs.shape)
+            # print("Target shape: ", targets.shape)
+            
             batch_size = inputs.shape[0]
             
             # Zero the gradients
@@ -160,6 +156,8 @@ class Trainer:
 
             # Forward pass
             outputs = self.model(inputs)
+            if isinstance(outputs, collections.OrderedDict):
+                outputs = outputs['out']
                         
             # Calculate the loss
             loss = self.loss_fn(outputs, targets)
@@ -171,8 +169,8 @@ class Trainer:
             # Update the loss
             epoch_loss += ( loss.item() * batch_size )
             
-            # Update the training metric
-            self.train_metric.update(outputs, targets)
+            # Update the training metric [DiceScore, IntersectOverUnion]
+            self.train_metric_tracker.update(outputs.cpu(), targets.cpu())
                     
                     
         self.lr_scheduler.step()
@@ -180,12 +178,12 @@ class Trainer:
         # Calculate average loss for the epoch
         epoch_loss /= self.num_train_data
         
-        # Calculate training metrics
-        acc = self.train_metric.accuracy()
-        pcacc = self.train_metric.per_class_accuracy()
+        # Calculate training metrics       
+        train_metrics = self.train_metric_tracker.calculate_metric()        
+        dice_score, mIoU = train_metrics[0], train_metrics[1]
         
          
-        return epoch_loss, acc, pcacc
+        return epoch_loss, dice_score, mIoU
     
     
     def _val_epoch(self) -> Tuple[float, float, float]:
@@ -198,7 +196,7 @@ class Trainer:
         """
         
         # Reset the validation metric
-        self.val_metric.reset()
+        self.val_metric_tracker.reset()
         
         # Initialize the epoch loss
         epoch_loss = 0.0
@@ -208,28 +206,37 @@ class Trainer:
         
         with torch.no_grad():
             
-            for inputs, targets in self.val_loader:
+            for _, (inputs, targets) in enumerate(self.val_loader):
                 
+                # Move inputs and targets to the specified device
                 inputs, targets = inputs.to(self.device), targets.to(self.device).long()
+                # Squueze the target tensor if it has a channel dimension [BatchSize, 1, H, W] -> [BatchSize, H, W]
+                targets = targets.squeeze(1)
+                
                 batch_size = inputs.shape[0]
 
                 # Forward pass
                 outputs = self.model(inputs)
-                
+                if isinstance(outputs, collections.OrderedDict):
+                    outputs = outputs['out']
+                else:
+                    targets = targets.squeeze(1)
+                    
+                # Calculate the loss
                 loss = self.loss_fn(outputs, targets)
                 
                 # Update the loss
                 epoch_loss += ( loss.item() * batch_size )
 
-                # Update the validation metric
-                self.val_metric.update(outputs, targets)
+                # Update the validation metric [DiceScore, IntersectOverUnion]
+                self.val_metric_tracker.update(outputs.cpu(), targets.cpu())
 
         # Calculate average loss for the epoch
         epoch_loss /= self.num_val_data
         
         # Calculate validation metrics
-        acc = self.val_metric.accuracy()
-        pcacc = self.val_metric.per_class_accuracy()
+        val_metrics = self.val_metric_tracker.calculate_metric()
+        dice_score, mIoU = val_metrics[0], val_metrics[1]
         
 
-        return epoch_loss, acc, pcacc
+        return epoch_loss, dice_score, mIoU

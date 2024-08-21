@@ -13,25 +13,15 @@ class DiceScore(Metric):
     Dice Score
     '''
 
-    def __init__(self, classes : List[str]) -> None:
-        
-        self.classes = classes
+    def __init__(self, num_classes : int) -> None:
         
         # Number of classes
-        self.num_classes = len(classes)
-        self.class_list = [i for i in range(0, len(self.classes))]
+        self.num_classes = num_classes
+        self.class_list = [i for i in range(0, self.num_classes)]
 
         self.reset()
 
     
-    def __str__(self):
-        '''
-        Return a string representation of the performance, mean IoU.
-        e.g. "mIou: 0.54"
-        '''
-        return f"Mean Dice Score: {self._dice_score():.2f}"
-            
-
     def reset(self) -> None:
         '''
         Resets the internal state.
@@ -88,7 +78,7 @@ class DiceScore(Metric):
             self.unions[i] += union
             
             
-    def _dice_score(self) -> float:
+    def calculate_metric(self) -> float:
         
         if self.intersections.sum() == 0:
             return 0
@@ -98,9 +88,5 @@ class DiceScore(Metric):
         
         # Return the mean Dice Score to get the overall dice coefficient for the image as a whole
         return dice_score.mean().item()
-    
-    
-    def calculate_dice_score(self) -> float:
-        return self._dice_score()
     
     

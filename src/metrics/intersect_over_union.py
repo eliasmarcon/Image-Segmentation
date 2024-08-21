@@ -13,24 +13,14 @@ class IntersectOverUnion(Metric):
     Mean Intersection over Union.
     '''
 
-    def __init__(self, classes : List[str]) -> None:
-        
-        self.classes = classes
+    def __init__(self, num_classes : int) -> None:
         
         # Number of classes
-        self.num_classes = len(classes)
-        self.class_list = [i for i in range(0, len(self.classes))]
+        self.num_classes = num_classes
+        self.class_list = [i for i in range(0, self.num_classes)]
 
         self.reset()
-
-    
-    def __str__(self):
-        '''
-        Return a string representation of the performance, mean IoU.
-        e.g. "mIou: 0.54"
-        '''
-        return f"mIoU: {self._mIoU():.2f}"
-            
+        
 
     def reset(self) -> None:
         '''
@@ -99,7 +89,7 @@ class IntersectOverUnion(Metric):
             self.unions[class_number] += union
         
     
-    def _mIoU(self) -> float:
+    def calculate_metric(self) -> float:
         '''
         Compute and return the mean IoU as a float between 0 and 1.
         Returns 0 if no data is available (after resets).
@@ -112,9 +102,9 @@ class IntersectOverUnion(Metric):
             return 0.0
         
         # Calculate IoU for each class
-        iou = torch.zeros(len(self.classes), dtype=torch.float32)
+        iou = torch.zeros(self.num_classes, dtype=torch.float32)
         
-        for idx in range(len(self.classes)):
+        for idx in range(self.num_classes):
         
             if self.unions[idx] == 0:
                 # If the union is 0, set IoU to 0 to avoid division by zero
@@ -124,15 +114,3 @@ class IntersectOverUnion(Metric):
 
         # Calculate mean IoU across all classes        
         return iou.mean().item()
-    
-    
-    def calculate_mIoU(self) -> float:
-        '''
-        Return the mean IoU as a float between 0 and 1.
-        Returns 0 if no data is available (after resets).
-        If the denominator for IoU calculation for one of the classes is 0,
-        use 0 as IoU for this class.
-        '''
-        return self._mIoU()
-
-

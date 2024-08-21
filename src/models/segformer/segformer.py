@@ -1,16 +1,20 @@
-from functools import partial
 import torch.nn as nn
+from functools import partial
 
-
+import utils_main
+from models.parent_class import BaseModel
 from models.segformer.mit_transformer import  MixVisionTransformer
 from models.segformer.segformer_head import SegFormerHead, resize
 
 
 # SOURCE: https://github.com/NVlabs/SegFormer
 
-class SegFormer(nn.Module):
-    def __init__(self, num_classes):
+class SegFormer(BaseModel):
+    
+    def __init__(self, num_classes : int = utils_main.N_CLASSES):
+    
         super().__init__()
+    
         self.encoder=MixVisionTransformer(
             embed_dims=[32, 64, 160, 256],                 # the feature dimension of each of the 4 blocks
             num_heads=[1, 2, 5, 8],                        # the feature dimension of each of the 4 blocks
@@ -29,10 +33,12 @@ class SegFormer(nn.Module):
                                    num_classes=num_classes)
 
     def forward(self, x):
+    
         enc = self.encoder(x)
         out = self.decoder(enc)
         # upsample to the initial resolution
-        out = resize(out, size=x.size()[2:], mode='bilinear',align_corners=False)
+        out = resize(out, size=x.size()[2:], mode='bilinear', align_corners=False)
+    
         return out
 
     

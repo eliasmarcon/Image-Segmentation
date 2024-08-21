@@ -181,20 +181,11 @@ class OverlapPatchEmbed(nn.Module):
         #TODO implement 
         # compute the new H an W given the original image size and the patchsize 
         # (we only look at quadratic patches meaning patch_size is same for H and W)
-        
-        # Calculate new image size after dividing by patches
-        self.H = (img_size - patch_size) // stride + 1
-        self.W = self.H  # Assuming square patches
-
-        # Total number of patches
+        self.H, self.W = img_size // patch_size, img_size // patch_size
+        # compute the number of patches given the new H and W
         self.num_patches = self.H * self.W
-        
-        # # Calculate the new height and width of the image after applying the convolution
-        # padding = patch_size // 2
-        # self.H = (img_size + 2 * padding - patch_size) // stride + 1
-        # self.W = self.H  # Since we're assuming quadratic patches, H and W are the same
 
-        
+
         self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=stride,
                               padding=(patch_size // 2, patch_size // 2))
         self.norm = nn.LayerNorm(embed_dim)

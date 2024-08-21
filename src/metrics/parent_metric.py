@@ -1,6 +1,7 @@
 import torch
+import numpy as np
 
-from typing import List
+from typing import List, Tuple
 from abc import ABC, abstractmethod
 
 
@@ -22,11 +23,32 @@ class Metric(ABC):
         Update the measure by comparing predicted data with ground-truth target data.
         """
         pass
-    
-    @abstractmethod
-    def __str__(self) -> str:
-        '''
-        Return a string representation of the performance.
-        '''
 
+    @abstractmethod
+    def calculate_metric(self) -> float:
+        """
+        Compute and return the metric.
+        """
         pass
+    
+    
+    
+class MetricTracker():
+    
+    """
+    A class to track multiple metrics.
+    """
+    
+    def __init__(self, metrics: List[Metric]) -> None:
+        self.metrics = metrics
+
+    def reset(self) -> None:
+        for metric in self.metrics:
+            metric.reset()
+
+    def update(self, prediction: torch.Tensor, target: torch.Tensor) -> None:
+        for metric in self.metrics:
+            metric.update(prediction, target)
+
+    def calculate_metric(self) -> List[float]:
+        return [metric.calculate_metric() for metric in self.metrics]
