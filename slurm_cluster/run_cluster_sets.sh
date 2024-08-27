@@ -1,22 +1,23 @@
 #!/bin/bash
 
-#SBATCH --job-name=cifar10
+#SBATCH --job-name=image_seg
 #SBATCH -o ./logs/%x-%j.log
 #SBATCH --exclusive
 
 
 source /opt/conda/etc/profile.d/conda.sh
-conda activate cifar
+conda activate image_segmentation
 
 
 # Assign the hyperparameter file argument
-file_number="$1"
-PARAM_FILE="./hyperparameter_sets/hyperparameters_${file_number}.txt"
+folder_type="$1"
+file_number="$2"
+PARAM_FILE="./hyperparameter_sets/${folder_type}/hyperparameters_${file_number}.txt"
 
 
 # Check if the parameter file exists
 if [ ! -f "$PARAM_FILE" ]; then
-  echo "Parameter file 'hyperparameter_sets/$PARAM_FILE' not found!"
+  echo "Parameter file $PARAM_FILE not found!"
   exit 1
 fi
 
@@ -29,13 +30,12 @@ for params in "${hyperparameters[@]}"; do
     num_epochs=$1
     batch_size=$2
     model_type=$3
-    scheduler=$4
-    learning_rate=$6
-    weight_decay=$7
-    gamma=$8
+    learning_rate=$5
+    weight_decay=$6
+    gamma=$7
 
-    if [ "$5" == "True" ]; then
-        AUGMENTATION="--data_augmentation"
+    if [ "$4" == "True" ]; then
+        AUGMENTATION="--augmentation"
     else
         AUGMENTATION=""
     fi
@@ -45,7 +45,6 @@ for params in "${hyperparameters[@]}"; do
         --num_epochs $num_epochs \
         --batch_size $batch_size \
         --model_type $model_type \
-        --scheduler $scheduler \
         $AUGMENTATION \
         --learning_rate $learning_rate \
         --weight_decay $weight_decay \

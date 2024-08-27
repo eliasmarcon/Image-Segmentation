@@ -2,6 +2,7 @@ import torch
 import os
 
 
+
 class Tester:
     
     def __init__(self, model, loss_fn, test_loader, test_metric, wandb_logger, save_dir, device) -> None:
@@ -42,9 +43,10 @@ class Tester:
         # Initialize the test loss, true and predicted labels, and the test metric
         self.test_metric.reset()
         
+        # Initialize the test loss
         test_loss = 0.0
 
-        # Test loop
+        # Set the model to evaluation mode
         self.model.eval()
         
         with torch.no_grad():
@@ -52,6 +54,10 @@ class Tester:
             for inputs, targets in self.test_loader:
 
                 inputs, targets = inputs.to(self.device), targets.to(self.device).long()
+                # Squueze the target tensor if it has a channel dimension [BatchSize, 1, H, W] -> [BatchSize, H, W]
+                targets = targets.squeeze(1)
+                
+                # Get the batch size
                 batch_size = inputs.shape[0]
                 
                 # Forward pass
@@ -62,30 +68,22 @@ class Tester:
                 test_loss += ( loss.item() * batch_size )
                 
                 # Update the test metric
-                self.test_metric.update(outputs, targets)
+                self.test_metric.update(outputs.cpu(), targets.cpu())
 
 
         # Calculate average loss for the test set
         test_loss /= len(self.test_loader.dataset)
         
         # Calculate test metrics
-        acc = self.test_metric.accuracy()
-        pcacc = self.test_metric.per_class_accuracy()
+        test_metric = self.test_metric.calculate_metric()
+        dice_score, mIoU = test_metric[0], test_metric[1]
+        
         
         # Log test metrics
         if self.wandb_logger:
             
             self.wandb_logger.log({
                 f"test_loss_{test_checkpoint_type}": test_loss,
-                f"test_accuracy_{test_checkpoint_type}": acc,
-                f"test_per_class_accuracy_{test_checkpoint_type}": pcacc
+                f"test_dice_score_{test_checkpoint_type}": dice_score,
+                f"test_mIoU_{test_checkpoint_type}": mIoU
             })
-            
-            # Log the per class accuracy
-            per_class_accs = self.test_metric.get_per_class_accuracy()
-            class_names = self.test_metric.classes
-            
-            for per_class_acc, class_name in zip(per_class_accs, class_names):
-                self.wandb_logger.log({
-                    f"test_per_class_accuracy_{class_name.lower()}_{test_checkpoint_type}": per_class_acc
-                })

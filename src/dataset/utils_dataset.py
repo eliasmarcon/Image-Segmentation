@@ -1,4 +1,5 @@
 
+import random
 import torch
 import torchvision.transforms.v2
 
@@ -8,7 +9,7 @@ from enum import Enum
 
 # Own modules
 from dataset.cityscapes import CityscapesCustom
-
+from utils_main import IMAGE_SIZE
 
 class DatasetType(Enum):
     
@@ -17,26 +18,46 @@ class DatasetType(Enum):
     TEST = "test"
 
 
-def get_transformations(image_size : tuple = (1024, 2048)): # image_size --> (height, width)    
+def get_transformations(augmentation : bool = False):
     
-    image_size = (64, 64)
+    torch.manual_seed(100)
+    random.seed(100)
     
-    img_transform = torchvision.transforms.Compose([torchvision.transforms.v2.ToImage(), 
-                                                    torchvision.transforms.v2.ToDtype(torch.float32, scale=True),
-                                                    torchvision.transforms.v2.Resize(size=(image_size[0], image_size[1]), interpolation=torchvision.transforms.v2.InterpolationMode.NEAREST), # (h, w)
-                                                    torchvision.transforms.v2.Normalize(mean = [0.485, 0.456,0.406], std = [0.229, 0.224, 0.225])])
+    if augmentation:
+        
+        img_transform = torchvision.transforms.Compose([torchvision.transforms.v2.ToImage(), 
+                                                        torchvision.transforms.v2.ToDtype(torch.float32, scale=True),
+                                                        torchvision.transforms.v2.RandomHorizontalFlip(p=0.5),
+                                                        torchvision.transforms.v2.RandomAdjustSharpness(sharpness_factor=2, p=0.5),
+                                                        torchvision.transforms.v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2),
+                                                        torchvision.transforms.v2.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0)),
+                                                        torchvision.transforms.v2.Resize(size=(IMAGE_SIZE[0], IMAGE_SIZE[1]), interpolation=torchvision.transforms.v2.InterpolationMode.NEAREST), # (h, w)
+                                                        torchvision.transforms.v2.Normalize(mean = [0.485, 0.456,0.406], std = [0.229, 0.224, 0.225])])
+        
+        target_transform = torchvision.transforms.Compose([torchvision.transforms.v2.ToImage(), 
+                                                           torchvision.transforms.v2.ToDtype(torch.long, scale=False),
+                                                           torchvision.transforms.v2.RandomHorizontalFlip(p=0.5),
+                                                           torchvision.transforms.v2.Resize(size=(IMAGE_SIZE[0], IMAGE_SIZE[1]), interpolation=torchvision.transforms.v2.InterpolationMode.NEAREST)])
+                                
+
+    else:
     
-    target_transform = torchvision.transforms.Compose([torchvision.transforms.v2.ToImage(), 
-                                                        torchvision.transforms.v2.ToDtype(torch.long, scale=False),
-                                                        torchvision.transforms.v2.Resize(size=(image_size[0], image_size[1]), interpolation=torchvision.transforms.v2.InterpolationMode.NEAREST)])
-                            
+        img_transform = torchvision.transforms.Compose([torchvision.transforms.v2.ToImage(), 
+                                                        torchvision.transforms.v2.ToDtype(torch.float32, scale=True),
+                                                        torchvision.transforms.v2.Resize(size=(IMAGE_SIZE[0], IMAGE_SIZE[1]), interpolation=torchvision.transforms.v2.InterpolationMode.NEAREST), # (h, w)
+                                                        torchvision.transforms.v2.Normalize(mean = [0.485, 0.456,0.406], std = [0.229, 0.224, 0.225])])
+        
+        target_transform = torchvision.transforms.Compose([torchvision.transforms.v2.ToImage(), 
+                                                           torchvision.transforms.v2.ToDtype(torch.long, scale=False),
+                                                           torchvision.transforms.v2.Resize(size=(IMAGE_SIZE[0], IMAGE_SIZE[1]), interpolation=torchvision.transforms.v2.InterpolationMode.NEAREST)])
+                                
     return img_transform, target_transform
 
 
-def get_cityscapes_datasets(base_path : Path = "./cityscapes_data/", val_split : float = 0.2) -> Tuple[CityscapesCustom, CityscapesCustom, CityscapesCustom]:
+def get_cityscapes_datasets(base_path : Path = "./cityscapes_data/", augmentation : bool = False, val_split : float = 0.2) -> Tuple[CityscapesCustom, CityscapesCustom, CityscapesCustom]:
     
     # Get the transformations
-    img_transform, target_transform = get_transformations()
+    img_transform, target_transform = get_transformations(augmentation)
     
     # Load the full training dataset
     full_train_data = CityscapesCustom(

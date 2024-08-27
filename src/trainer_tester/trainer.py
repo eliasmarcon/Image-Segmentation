@@ -6,6 +6,7 @@ import collections
 from typing import Tuple
 
 
+
 class Trainer:
     
     def __init__(self,
@@ -146,9 +147,7 @@ class Trainer:
             # Squueze the target tensor if it has a channel dimension [BatchSize, 1, H, W] -> [BatchSize, H, W]
             targets = targets.squeeze(1)
             
-            # print("Input shape: ", inputs.shape)
-            # print("Target shape: ", targets.shape)
-            
+            # Get the batch size
             batch_size = inputs.shape[0]
             
             # Zero the gradients
@@ -156,9 +155,7 @@ class Trainer:
 
             # Forward pass
             outputs = self.model(inputs)
-            if isinstance(outputs, collections.OrderedDict):
-                outputs = outputs['out']
-                        
+
             # Calculate the loss
             loss = self.loss_fn(outputs, targets)
             loss.backward()

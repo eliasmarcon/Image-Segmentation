@@ -80,13 +80,18 @@ class DiceScore(Metric):
             
     def calculate_metric(self) -> float:
         
-        if self.intersections.sum() == 0:
-            return 0
+        if torch.sum(self.intersections) == 0:
+            return 0.0
         
-        # Calculate the Dice Score 
-        dice_score = (2 * self.intersections.sum() / self.unions.sum())
+        dice_scores = torch.zeros(self.num_classes, dtype=torch.float32)
         
-        # Return the mean Dice Score to get the overall dice coefficient for the image as a whole
-        return dice_score.mean().item()
+        for i in range(self.num_classes):
+        
+            if self.unions[i] == 0:
+                self.unions[i] = 1e-6 # to avoid division by zero
+        
+            dice_scores[i] =(2 * self.intersections[i]) / (self.unions[i])
+        
+        return torch.sum(dice_scores).item() / dice_scores.size()[0]
     
     

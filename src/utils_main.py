@@ -4,8 +4,10 @@ from pathlib import Path
 
 # DEFINE CONSTANTS
 IN_CHANNELS = 3
+IMAGE_SIZE = (256, 256) # original (1024, 2048) --> (height, width)    
 N_CLASSES = 19
 TEST_CHECKPOINTS = ['terminal.pt', 'best_val_loss.pt', 'best_val_mIoU.pt']
+
 
 
 def create_save_dir(runs_path : str, model_run_name : str) -> Path:

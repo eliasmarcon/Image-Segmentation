@@ -49,8 +49,27 @@ def create_model(model_type : ModelType) -> torch.nn.Module:
         
     elif ModelType.SEGFORMER.value in model_type:
         
-        # TODO - Add the other configurations        
-        model = SegFormer(utils_main.N_CLASSES)
+        model_size = model_type.split('_')[1]
+        
+        if model_size == "small":
+            
+            embed_dims=[32, 64, 160, 256]
+            num_heads=[1, 2, 5, 8]
+            
+        elif model_size == "base":
+            
+            embed_dims=[64, 128, 256, 320]
+            num_heads=[2, 2, 8, 8]
+           
+        elif model_size == "large":
+            
+            embed_dims=[128, 256, 320, 384]
+            num_heads=[2, 8, 8, 8]
+            
+        else:
+            raise ValueError(f"Model configuration for {model_type} not found") 
+        
+        model = SegFormer(embed_dims = embed_dims, num_heads = num_heads, num_classes = utils_main.N_CLASSES)
 
         
     elif ModelType.UNET.value in model_type:

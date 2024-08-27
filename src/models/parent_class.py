@@ -13,4 +13,4 @@ class BaseModel(torch.nn.Module):
 
     def load(self, path: Path):
         
-        self.load_state_dict(torch.load(path))
+        self.load_state_dict(torch.load(path, weights_only=True))

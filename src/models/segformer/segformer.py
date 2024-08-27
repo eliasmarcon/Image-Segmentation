@@ -1,6 +1,8 @@
 import torch.nn as nn
 from functools import partial
+from typing import List
 
+# own modules
 import utils_main
 from models.parent_class import BaseModel
 from models.segformer.mit_transformer import  MixVisionTransformer
@@ -11,13 +13,13 @@ from models.segformer.segformer_head import SegFormerHead, resize
 
 class SegFormer(BaseModel):
     
-    def __init__(self, num_classes : int = utils_main.N_CLASSES):
+    def __init__(self, embed_dims : List[int], num_heads : List[int], num_classes : int = utils_main.N_CLASSES):
     
         super().__init__()
     
         self.encoder=MixVisionTransformer(
-            embed_dims=[32, 64, 160, 256],                 # the feature dimension of each of the 4 blocks
-            num_heads=[1, 2, 5, 8],                        # the feature dimension of each of the 4 blocks
+            embed_dims=embed_dims,                 # the feature dimension of each of the 4 blocks
+            num_heads=num_heads,                        # the feature dimension of each of the 4 blocks
             mlp_ratios=[4, 4, 4, 4],                       # the ratio of how much to increase the hidden dim in the MLPs
             qkv_bias=True,                                 # whether to use bias for the q, k, v linear layers
             norm_layer=partial(nn.LayerNorm, eps=1e-6), 
@@ -27,7 +29,7 @@ class SegFormer(BaseModel):
             drop_path_rate=0.0)
 
         self.decoder=SegFormerHead(feature_strides=[4, 8, 16, 32],
-                                   in_channels=[32, 64, 160, 256],
+                                   in_channels=embed_dims,
                                    in_index=[0,1,2,3],
                                    decoder_params=dict(embed_dim=256),
                                    num_classes=num_classes)

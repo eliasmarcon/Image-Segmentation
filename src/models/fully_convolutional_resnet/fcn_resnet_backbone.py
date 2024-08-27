@@ -88,6 +88,7 @@ class Bottleneck(torch.nn.Module):
 
 
 class ResNet(torch.nn.Module):
+    
     def __init__(self, block: Type[Union[BasicBlock, Bottleneck]], layer_sizes: list, num_classes: int):
         super(ResNet, self).__init__()
         

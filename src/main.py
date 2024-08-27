@@ -41,7 +41,7 @@ def main(args):
     
     
     # Create training, validation and test data
-    train_data, val_data, test_data = utils_dataset.get_cityscapes_datasets(base_path = args.base_dataset_path)
+    train_data, val_data, test_data = utils_dataset.get_cityscapes_datasets(base_path = args.base_dataset_path, augmentation=args.augmentation)
     train_loader = utils_dataset.create_dataloaders(DatasetType.TRAIN, train_data, args.batch_size)
     val_loader = utils_dataset.create_dataloaders(DatasetType.VAL, val_data, args.batch_size)
     test_loader = utils_dataset.create_dataloaders(DatasetType.TEST, test_data, args.batch_size)
@@ -76,10 +76,10 @@ def main(args):
     
     ############################## Metrics ################################
     
-    logging.info('*' * 250)
+    logging.info('*' * 175)
     logging.info(f"Config: Model Type - {args.model_type} | Batch Size - {args.batch_size} | "
-                 f"Learing Rate - {args.learning_rate} | Weight Decay - {args.weight_decay} | Gamma - {args.gamma} |")
-    logging.info('*' * 250)
+                 f"Learning Rate - {args.learning_rate} | Weight Decay - {args.weight_decay} | Gamma - {args.gamma} |")
+    logging.info('*' * 175)
     
     ############################## Training ################################
     
@@ -149,7 +149,11 @@ if __name__ == "__main__":
     
     # Add an argument for the model type
     parser.add_argument('-m', '--model_type', default="resnet_50", type=str,
-                        help='model type to train [resnet, segformer, unet] (default: resnet_50)')
+                        help='model type to train [resnet_18, resnet_34, resnet_50, resnet_101, resnet_152, segformer_small, segformer_medium, segformer_large, unet_small, unet_medium, unet_large] (default: resnet_50)')
+    
+    # Add an argument for specifying if augmentation should be applied
+    parser.add_argument('-a', '--augmentation', default=False, action='store_true',
+                        help='augmentation to apply to the dataset (default: False)')
     
     # Add an argument for specifying the learning rate
     parser.add_argument('-l', '--learning_rate', default=0.0001, type=float,
