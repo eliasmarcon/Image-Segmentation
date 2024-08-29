@@ -1,10 +1,10 @@
 import torch
 import logging
 import time
-import collections
 
 from typing import Tuple
 
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 
 class Trainer:
@@ -18,7 +18,8 @@ class Trainer:
                  train_metric_tracker,
                  val_loader,
                  val_metric_tracker,
-                 device,
+                 local_rank,
+                 global_rank,
                  wandb_logger,
                  save_dir,
                  batch_size,
@@ -33,13 +34,16 @@ class Trainer:
         self.train_metric_tracker = train_metric_tracker
         self.val_loader = val_loader
         self.val_metric_tracker = val_metric_tracker
-        self.device = device
+        self.local_rank = local_rank
+        self.global_rank = global_rank
         self.wandb_logger = wandb_logger
         self.save_dir = save_dir
         self.batch_size = batch_size
         self.val_freq = val_freq
         self.early_stopping_patience = early_stopping_patience
         
+        # Initialize the global rank and local rank for distributed training
+        self.model = DDP(self.model, device_ids=[self.local_rank])
         
         # Initialize other variables
         self.num_train_data = len(train_loader.dataset)
@@ -76,19 +80,19 @@ class Trainer:
                 val_loss, val_dice_score, val_mIoU = self._val_epoch()
 
                 # Check if the current per class accuracy and validation loss is better than the best
-                if val_mIoU > self.best_mIoU:
+                if val_mIoU > self.best_mIoU and self.global_rank == 0:
                     self.best_mIoU = val_mIoU
 
                     # Save the model as the best per class accuracy model
-                    self.model.save(self.save_dir, f"best_val_mIoU")
+                    self.model.module.save(self.save_dir, f"best_val_mIoU")
                                 
                 # Check if the current validation loss is better than the best
-                if val_loss < self.best_val_loss:
+                if val_loss < self.best_val_loss and self.global_rank == 0:
                     self.best_val_loss = val_loss
                     patience_counter = 0  # Reset patience counter
 
                     # Save the model as the best validation loss model
-                    self.model.save(self.save_dir, f"best_val_loss")
+                    self.model.module.save(self.save_dir, f"best_val_loss")
                 else:
                     patience_counter += 1  # Increment patience counter
                     
@@ -102,13 +106,14 @@ class Trainer:
                 self.lr_scheduler.step()
                 
             # Log the current metrics
-            logging.info(
-                f"Epoch {epoch_idx:2}/{epochs} completed in {(time.time() - starting_time):4.2f} seconds | "
-                f"Train Loss: {train_loss:6.4f} | Train Dice Score: {train_dice_score:6.4f} | Train mIoU: {train_mIoU:6.4f} | "
-                f"Val Loss: {val_loss:6.4f} | Val Dice Score: {val_dice_score:6.4f} | Val mIoU: {val_mIoU:6.4f}"
-            )
+            if self.global_rank == 0:
+                logging.info(
+                    f"Epoch {epoch_idx:2}/{epochs} completed in {(time.time() - starting_time):4.2f} seconds | "
+                    f"Train Loss: {train_loss:6.4f} | Train Dice Score: {train_dice_score:6.4f} | Train mIoU: {train_mIoU:6.4f} | "
+                    f"Val Loss: {val_loss:6.4f} | Val Dice Score: {val_dice_score:6.4f} | Val mIoU: {val_mIoU:6.4f}"
+                )
                
-            if self.wandb_logger:
+            if self.wandb_logger and self.global_rank == 0:
                 
                 self.wandb_logger.log({
                     f"train_loss": train_loss,
@@ -120,7 +125,8 @@ class Trainer:
                 })
                             
         # save the final model
-        self.model.save(self.save_dir, f"terminal")
+        if self.global_rank == 0:
+            self.model.module.save(self.save_dir, f"terminal")
     
     
     def _train_epoch(self) -> Tuple[float, float, float]:
@@ -143,7 +149,7 @@ class Trainer:
         for _, (inputs, targets) in enumerate(self.train_loader):
             
             # Move inputs and targets to the specified device
-            inputs, targets = inputs.to(self.device), targets.to(self.device).long()
+            inputs, targets = inputs.to(self.local_rank), targets.to(self.local_rank).long()
             # Squueze the target tensor if it has a channel dimension [BatchSize, 1, H, W] -> [BatchSize, H, W]
             targets = targets.squeeze(1)
             
@@ -174,6 +180,10 @@ class Trainer:
 
         # Calculate average loss for the epoch
         epoch_loss /= self.num_train_data
+        
+        # Average the loss across all processes
+        torch.distributed.all_reduce(torch.tensor(epoch_loss).to(self.local_rank), op=torch.distributed.ReduceOp.SUM)
+        epoch_loss /= torch.distributed.get_world_size()
         
         # Calculate training metrics       
         train_metrics = self.train_metric_tracker.calculate_metric()        
@@ -206,7 +216,7 @@ class Trainer:
             for _, (inputs, targets) in enumerate(self.val_loader):
                 
                 # Move inputs and targets to the specified device
-                inputs, targets = inputs.to(self.device), targets.to(self.device).long()
+                inputs, targets = inputs.to(self.local_rank), targets.to(self.local_rank).long()
                 # Squueze the target tensor if it has a channel dimension [BatchSize, 1, H, W] -> [BatchSize, H, W]
                 targets = targets.squeeze(1)
                 
@@ -226,6 +236,10 @@ class Trainer:
 
         # Calculate average loss for the epoch
         epoch_loss /= self.num_val_data
+        
+        # Average the loss across all processes
+        torch.distributed.all_reduce(torch.tensor(epoch_loss).to(self.local_rank), op=torch.distributed.ReduceOp.SUM)
+        epoch_loss /= torch.distributed.get_world_size()
         
         # Calculate validation metrics
         val_metrics = self.val_metric_tracker.calculate_metric()

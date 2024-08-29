@@ -7,9 +7,13 @@ from pathlib import Path
 from typing import Tuple
 from enum import Enum
 
+from torch.utils.data.distributed import DistributedSampler
+
 # Own modules
 from dataset.cityscapes import CityscapesCustom
 from utils_main import IMAGE_SIZE
+
+
 
 class DatasetType(Enum):
     
@@ -115,3 +119,13 @@ def create_dataloaders(dataset_type : DatasetType, dataset : CityscapesCustom, b
                                            shuffle=False, 
                                            num_workers = 1)
         
+        
+def create_ddp_datalaoders(dataset : CityscapesCustom, batch_size : int) -> torch.utils.data.DataLoader:
+        
+    return torch.utils.data.DataLoader(
+                                        dataset,
+                                        batch_size=batch_size,
+                                        pin_memory=True,
+                                        shuffle=False,
+                                        sampler=DistributedSampler(dataset)
+                                    )
