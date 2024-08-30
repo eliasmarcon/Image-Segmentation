@@ -67,7 +67,7 @@ for params in "${hyperparameters[@]}"; do
         --rdzv_id $RANDOM \
         --rdzv_backend c10d \
         --rdzv_endpoint $head_node_ip:29500 \
-        ./src/main_ddp.py \
+        ./multi_gpu/main_ddp.py \
             --num_epochs $num_epochs \
             --batch_size $batch_size \
             --model_type $model_type \

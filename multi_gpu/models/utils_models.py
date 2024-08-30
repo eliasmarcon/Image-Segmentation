@@ -59,12 +59,12 @@ def create_model(model_type : ModelType) -> torch.nn.Module:
         elif model_size == "base":
             
             embed_dims=[64, 128, 256, 320]
-            num_heads=[2, 2, 4, 5]
+            num_heads=[2, 2, 2, 2]
            
         elif model_size == "large":
             
             embed_dims=[128, 256, 320, 384]
-            num_heads=[2, 4, 5, 6]
+            num_heads=[2, 2, 2, 2]
             
         else:
             raise ValueError(f"Model configuration for {model_type} not found") 

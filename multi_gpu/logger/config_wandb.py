@@ -1,0 +1,3 @@
+WANDB_KEY = "8f66cbcd010d08c0d7785938882e0961dbd39bab"
+WANDB_ENTITY = "hansij922"
+WANDB_PROJECT = "Image-Segmentation"

@@ -1,6 +1,6 @@
 import torch
 import os
-
+import time
 
 
 class Tester:
@@ -37,8 +37,10 @@ class Tester:
         test_loader: The test data set to test the model on.
         """
 
+        # Wait for the model to load if multiple processes are loading the model
+        time.sleep(8)
         # Load the model checkpoint
-        self.model.load(os.path.join(self.save_dir, test_checkpoint_type))
+        self.model.load(os.path.join(self.save_dir, test_checkpoint_type), map_location=f"cuda:{self.device}")
         
         # Initialize the test loss, true and predicted labels, and the test metric
         self.test_metric.reset()
@@ -74,8 +76,12 @@ class Tester:
         # Calculate average loss for the test set
         test_loss /= len(self.test_loader.dataset)
         
+        # Average the loss across all processes
+        torch.distributed.all_reduce(torch.tensor(test_loss).to(self.device), op=torch.distributed.ReduceOp.SUM)
+        test_loss /= torch.distributed.get_world_size()
+        
         # Calculate test metrics
-        test_metric = self.test_metric.calculate_metric()
+        test_metric = self.test_metric.calculate_metric(self.device)
         dice_score, mIoU = test_metric[0], test_metric[1]
         
         

@@ -1,0 +1,112 @@
+import torch
+
+from typing import List
+
+# own modules
+from metrics.parent_metric import Metric
+
+
+
+class DiceScore(Metric):
+    
+    '''
+    Dice Score
+    '''
+
+    def __init__(self, num_classes : int) -> None:
+        
+        # Number of classes
+        self.num_classes = num_classes
+        self.class_list = [i for i in range(0, self.num_classes)]
+
+        self.reset()
+
+    
+    def reset(self) -> None:
+        '''
+        Resets the internal state.
+        '''
+        # Arrays to accumulate intersection and union values for each class
+        self.intersections = torch.zeros(self.num_classes, dtype=torch.float32)
+        self.unions = torch.zeros(self.num_classes, dtype=torch.float32)
+
+
+    def update(self, prediction: torch.Tensor, target: torch.Tensor) -> None:
+        '''
+        Update the measure by comparing predicted data with ground-truth target data.
+        prediction must have shape (b,c,h,w) where b=batchsize, c=num_classes, h=height, w=width. --> done
+        target must have shape (b,h,w) and values between 0 and c-1 (true class labels). --> done
+        Raises ValueError if the data shape or values are unsupported.
+        Make sure to not include pixels of value 255 in the calculation since those are to be ignored. 
+        '''
+
+        # Get unique values in target
+        unique_values = set(torch.unique(target).tolist())
+        
+        # in order to also be able to use the resnet with the same script 
+        if 255 in unique_values:
+            unique_values.remove(255)
+        
+        # Check the shapes and values
+        if prediction.dim() != 4:
+            raise ValueError("Prediction must have shape (b, c, h, w).")
+
+        if target.shape[1:] != prediction.shape[2:] and target.dim() != 3:
+            raise ValueError("Target must have shape (b, h, w) matching the prediction height and width.")
+
+        # Ensure target values are within the range of classes and/or ignore index        
+        if not unique_values.issubset(self.class_list):
+            raise ValueError("Target values must be between 0 and c - 1.")
+        
+        
+        # Obtain the predicted class for each pixel
+        predicted_class = torch.argmax(prediction, dim = 1)
+        
+        # Calculate the Dice Score for each class
+        for i in range(self.num_classes):
+            
+            # Ignore pixels with value 255
+            if i == 255:
+                continue
+            
+            # Calculate the intersection and union
+            intersection = torch.logical_and(target == i, predicted_class == i).sum()
+            union = torch.logical_or(target == i, predicted_class == i).sum()
+            
+            # Accumulate the intersection and union
+            self.intersections[i] += intersection
+            self.unions[i] += union
+            
+            
+    def calculate_metric(self, local_rank: int) -> float:
+        
+        # Move tensors to the correct device
+        self.intersections = self.intersections.to(local_rank)
+        self.unions = self.unions.to(local_rank)
+
+        # Synchronize tensors across all GPUs
+        torch.distributed.all_reduce(self.intersections, op=torch.distributed.ReduceOp.SUM)
+        torch.distributed.all_reduce(self.unions, op=torch.distributed.ReduceOp.SUM)
+
+        # Check if there are any intersections
+        if torch.sum(self.intersections) == 0:
+            return 0.0
+
+        dice_scores = torch.zeros(self.num_classes, dtype=torch.float32, device=local_rank)
+
+        for i in range(self.num_classes):
+            if self.unions[i] == 0:
+                self.unions[i] = 1e-6  # to avoid division by zero
+
+            dice_scores[i] = (2 * self.intersections[i]) / (self.unions[i])
+
+        # Calculate the mean Dice score
+        mean_dice = torch.mean(dice_scores).item()
+
+        # Ensure all processes have the same result
+        torch.distributed.all_reduce(torch.tensor([mean_dice], device=local_rank), op=torch.distributed.ReduceOp.SUM)
+        mean_dice /= torch.distributed.get_world_size()
+
+        return mean_dice
+    
+    

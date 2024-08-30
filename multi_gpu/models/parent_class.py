@@ -17,6 +17,6 @@ class BaseModel(torch.nn.Module):
         torch.save(self.state_dict(), filename)
 
 
-    def load(self, path: Path):
+    def load(self, path: Path, map_location : str):
         
-        self.load_state_dict(torch.load(path))
+        self.load_state_dict(torch.load(path, map_location=map_location))
